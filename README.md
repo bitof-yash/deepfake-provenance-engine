@@ -53,9 +53,9 @@ So we switched to pretrained embeddings: wav2vec2 for audio and CLIP for the fac
 
 | model | clip AUC (95% CI) | localization mean IoU |
 |---|---|---|
-| audio only | 0.92 (0.91-0.94) | 0.56 |
-| video only | 0.66 (0.63-0.69) | 0.26 |
-| audio + video | 0.91 (0.90-0.93) | 0.55 |
+| audio only | 0.93 (0.91-0.94) | 0.56 |
+| video only | 0.66 (0.63-0.68) | 0.23 |
+| audio + video | 0.91 (0.90-0.93) | 0.54 |
 
 These numbers use clip-normalization, which means subtracting each clip's mean embedding so the model cannot just recognise a whole clip's "style". The raw numbers are higher (up to 0.98), but we do not trust them, because of the next section.
 
@@ -70,7 +70,9 @@ We checked whether plain file metadata can separate real from fake in LAV-DF, wi
 
 All three fake categories show it equally, which suggests the fakes were re-muxed differently from the reals. A model can learn that instead of learning anything about deepfakes. Clip-normalization and duration-controlled AUC (both in `train_windows.py`) reduce the problem but probably do not remove it.
 
-So treat the AUCs above as upper bounds, not as real-world accuracy. We have not tested on any other dataset yet.
+We then re-encoded every clip with identical ffmpeg settings and cut audio and video to the same length (`scripts/normalize_clips.py`). The metadata shortcuts dropped to about chance (duration gap 0.85 to 0.51, audio bitrate 0.77 to 0.53) and we re-ran everything on the clean clips. The audio results did not change, but the raw video-only AUC fell from 0.84 to 0.79, so part of the earlier video score was encoding artifacts.
+
+One red flag remains: the audio-only model scores about 0.80 on fake_video clips, where the audio is supposed to be genuine. So it is still picking up something other than fake audio. Treat the numbers above as upper bounds, not real-world accuracy. We have not tested on any other dataset yet.
 
 ## Known limitations
 
@@ -84,7 +86,7 @@ So treat the AUCs above as upper bounds, not as real-world accuracy. We have not
 
 ## What we want to do next
 
-- Re-encode every clip identically before extracting embeddings, so the metadata shortcut disappears, then re-measure.
+- Find out why the audio model flags fake_video clips (cross-category tests, and scoring windows inside versus outside the fake segment within the same clip).
 - Cross-category tests: train on fake_audio, test on fake_video, and the reverse.
 - Try FakeAVCeleb as a second dataset.
 - Replace the Haar mouth tracking with landmarks for a real lip-sync score.
