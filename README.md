@@ -1,69 +1,91 @@
 # Deepfake Forensics Provenance Engine (BT-225)
 
-Multi-modal deepfake forensics MVP: audio-visual detection, segment-level localization and C2PA provenance
-fused into one trust decision. API-first (FastAPI) with a React/Vite web UI.
+Our capstone project. You upload a video, and it tells you whether it looks fake, which seconds look suspicious, and whether the file carries valid C2PA provenance. Then it combines those into one trust decision. The backend is FastAPI and the UI is React + Vite.
 
-## Run it
+## Running it
 
-Needs Python 3.11+, Node 20+, and `ffmpeg`/`ffprobe` on PATH.
+You need Python 3.11+, Node 20+ and ffmpeg/ffprobe on your PATH.
 
 ```bash
-# 1. Backend  (http://localhost:8000, docs at /docs)
 cd backend
-python3 -m venv .venv && source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8000
+```
 
-# 2. Frontend (http://localhost:5173)  -- in a second terminal
+In a second terminal:
+
+```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-Tests: `cd backend && python -m pytest -q` (generates synthetic clips with ffmpeg, no datasets needed).
+The API is at http://localhost:8000 (docs at /docs) and the UI is at http://localhost:5173.
 
-API: `POST /analyze` (multipart field `file`) returns windows, flagged segments, provenance and the routing decision.
-`GET /health` reports whether `ffmpeg` and `c2patool` were found.
+Tests: `cd backend && python -m pytest -q`. They make their own clips with ffmpeg, so you do not need any dataset.
 
-## Pipeline
+`POST /analyze` takes a video in the `file` field and returns per-window scores, flagged segments, the provenance result and the routing decision. `GET /health` tells you whether ffmpeg and c2patool were found.
 
-```
-video ──► frames ──► visual artifact score (per 1 s window) ──┐
-      └─► audio  ──► spectral score (per 1 s window) ──────────┼─► attention-weighted fusion ─► segments
-          mouth motion × audio energy ► lip-sync score ────────┘                │
-file bytes ──► C2PA check (c2patool) ─────────────────────────────────► trust routing ─► Trust Report
-```
+## How it works
 
-| File | Role |
-|---|---|
-| `app/video_analysis.py` | Face-region high-frequency energy, sharpness, temporal jitter (within-clip outliers) |
-| `app/audio_analysis.py` | Spectral flatness, high-band ratio, spectral flux (within-clip outliers) |
-| `app/lipsync.py` | Mouth-motion vs audio-energy correlation |
-| `app/fusion.py` | Per-window fusion, cross-modal agreement boost, segment merging |
-| `app/provenance.py` | C2PA verification via `c2patool` |
-| `app/routing.py` | Trust-routing policy (ACCEPT / ACCEPT_UNVERIFIED / REVIEW / ESCALATE / REJECT) |
-| `app/config.py` | All thresholds and limits |
+Video frames and audio are scored in short windows, and the scores are fused into one score per window. Neighbouring suspicious windows get merged into segments. Separately, the file is checked for a C2PA manifest, and a routing policy combines that with the detection result.
 
-Trust routing handles the conflict cases the project is about: valid provenance + detector says fake -> `ESCALATE`;
-invalid (broken) provenance -> `REJECT`/`REVIEW`; no provenance -> detection alone, capped at "Medium Trust".
+The routing policy covers the awkward cases:
+- valid provenance but the detector says fake: ESCALATE
+- broken or tampered provenance: REJECT or REVIEW
+- no provenance: use detection alone, capped at "Medium Trust"
+- signed by an untrusted signer: handled as its own status, not treated as valid
 
-## What is real and what is a placeholder (read before presenting)
+Code layout (all under `backend/app/`):
+- `video_analysis.py`, `audio_analysis.py`, `lipsync.py`: the original handcrafted detectors
+- `clipmodel.py`: the learned per-window model
+- `fusion.py`: fusing window scores and merging segments
+- `provenance.py`: C2PA check via c2patool
+- `routing.py`: the trust routing policy
+- `config.py`: thresholds and limits
 
-- **Detectors are heuristics, not trained models.** They flag windows that differ strongly from the rest of the
-  same clip. The tests show they catch crude corruption (noise bursts) and localize it; they will **not** reliably
-  catch modern face-swap or voice-clone deepfakes. No accuracy figure exists yet, so do not claim one.
-- **"Cross-attention fusion" is a stand-in.** `fusion.fuse_window` uses confidence-driven softmax weights. The
-  learned cross-attention model is future work (see below); the pipeline is built so it can replace that one function.
-- **Lip-sync is a weak signal** and is down-weighted. A Haar face detector can also fire on non-face content.
-- **C2PA needs `c2patool`.** Without it the engine only detects C2PA markers and reports `present_unverified`, which
-  is never treated as valid. Install `c2patool` (Content Authenticity Initiative) and put it on PATH for real validation.
-- The trust score is an uncalibrated heuristic (`100 x (1 - detection)` adjusted by provenance), not a probability.
-- Only the first 60 s of a file are analysed; uploads are capped at 200 MB.
+## Results so far (LAV-DF, 4000-clip subset)
 
-## Next steps toward the approved abstract
+The first version used handcrafted heuristics (spectral flatness, face sharpness and so on). They did not work. Clip-level AUC was 0.50, which is a coin flip, and localization IoU was 0.098.
 
-1. Extract features / train a fusion model on FakeAVCeleb and LAV-DF (Colab/Kaggle GPU), replacing `fuse_window`
-   and the heuristic scorers; report real metrics (AUC, localization IoU) for the paper.
-2. Replace the Haar face detector with a landmark-based mouth tracker for a proper lip-sync (SyncNet-style) score.
-3. Install `c2patool`, add signed/tampered C2PA test files, and test the ESCALATE and invalid-signature paths on real manifests.
-4. Add an API key / rate limit before exposing it beyond localhost.
+So we switched to pretrained embeddings: wav2vec2 for audio and CLIP for the face crop, taken every 0.25 s, with a logistic regression on top (`scripts/extract_embeddings.py` and `scripts/train_windows.py`).
+
+| model | clip AUC (95% CI) | localization mean IoU |
+|---|---|---|
+| audio only | 0.92 (0.91-0.94) | 0.56 |
+| video only | 0.66 (0.63-0.69) | 0.26 |
+| audio + video | 0.91 (0.90-0.93) | 0.55 |
+
+These numbers use clip-normalization, which means subtracting each clip's mean embedding so the model cannot just recognise a whole clip's "style". The raw numbers are higher (up to 0.98), but we do not trust them, because of the next section.
+
+For scale: LAV-DF fake segments are short (median 0.66 s), so even a perfect detector with 0.25 s windows only gets IoU of about 0.73-0.79. An IoU of 0.55 is therefore not as far from the ceiling as it sounds.
+
+## Dataset shortcut problem (important)
+
+We checked whether plain file metadata can separate real from fake in LAV-DF, without looking at any content. It can:
+- audio/video duration gap: AUC 0.85
+- audio bitrate: AUC 0.77
+- clip duration: AUC 0.66
+
+All three fake categories show it equally, which suggests the fakes were re-muxed differently from the reals. A model can learn that instead of learning anything about deepfakes. Clip-normalization and duration-controlled AUC (both in `train_windows.py`) reduce the problem but probably do not remove it.
+
+So treat the AUCs above as upper bounds, not as real-world accuracy. We have not tested on any other dataset yet.
+
+## Known limitations
+
+- Audio does most of the work. The video-only model is weak once clip-level shortcuts are removed.
+- The lip-sync score is weak. It uses a Haar face detector, which sometimes fires on things that are not faces.
+- Fusion is still a simple confidence-weighted softmax, not a learned cross-attention model.
+- The trust score is a heuristic (100 x (1 - detection), adjusted by provenance). It is not a calibrated probability.
+- C2PA validation needs `c2patool` installed. Without it the engine can only see that C2PA markers exist, and reports `present_unverified`, which is never treated as valid.
+- Only the first 60 s of a file is analysed, and uploads are capped at 200 MB.
+- No auth or rate limiting, so keep it on localhost.
+
+## What we want to do next
+
+- Re-encode every clip identically before extracting embeddings, so the metadata shortcut disappears, then re-measure.
+- Cross-category tests: train on fake_audio, test on fake_video, and the reverse.
+- Try FakeAVCeleb as a second dataset.
+- Replace the Haar mouth tracking with landmarks for a real lip-sync score.
+- Test the ESCALATE and invalid-signature paths on more real C2PA manifests.
