@@ -72,7 +72,42 @@ All three fake categories show it equally, which suggests the fakes were re-muxe
 
 We then re-encoded every clip with identical ffmpeg settings and cut audio and video to the same length (`scripts/normalize_clips.py`). The metadata shortcuts dropped to about chance (duration gap 0.85 to 0.51, audio bitrate 0.77 to 0.53) and we re-ran everything on the clean clips. The audio results did not change, but the raw video-only AUC fell from 0.84 to 0.79, so part of the earlier video score was encoding artifacts.
 
-One red flag turned out to be informative: the audio-only model scores about 0.80 on fake_video clips, where the audio is supposed to be genuine. Position in the clip does not explain it (position-only within-clip AUC 0.56-0.59, and dropping the first and last second changes nothing). A boundary analysis does: on fake_video clips the audio score peaks in the 0.25 s window at the segment edge (0.64 inside, 0.35 just outside, about 0.11 far away) and is back near baseline within 0.5 s. So much of the audio model's performance is splice/edit-point detection. On fake_audio clips the score also stays high deeper into the segment (0.78-0.85). An interior-only test (`scripts/interior_check.py`) confirms real synthesis signal: using only windows at least 0.25 s inside a segment against windows from real clips, audio AUC is 0.97 on fake_audio (clip-normalised; 0.995 raw) and 0.66 on the fake_video control, and at a 0.5 s margin it is 0.99 on fake_audio against about 0.55 on fake_video (only 9 positive windows, so treat that as consistent with chance). A within-clip version of the test (`scripts/interior_within.py`) removes the speaker caveat: comparing windows at least 0.25 s inside a fake segment against windows at least 0.5 s outside it in the same clip (same speaker, microphone, room and encoding), audio AUC is 0.98 on fake_audio (156 test clips) and 0.98 on fake_av (196), against 0.65 on the fake_video control (only 24 clips, so indicative). Caveat: this is one dataset with one synthesis system, so it says nothing yet about other generators. Cross-category transfer (0.76-0.95 for audio) is probably inflated by the shared boundary signal. Treat the numbers above as upper bounds, not real-world accuracy. We have not tested on any other dataset yet.
+One red flag turned out to be informative: the audio-only model scores about 0.80 on fake_video clips, where the audio is supposed to be genuine. Position in the clip does not explain it (position-only within-clip AUC 0.56-0.59, and dropping the first and last second changes nothing). A boundary analysis does: on fake_video clips the audio score peaks in the 0.25 s window at the segment edge (0.64 inside, 0.35 just outside, about 0.11 far away) and is back near baseline within 0.5 s. So much of the audio model's performance is splice/edit-point detection. On fake_audio clips the score also stays high deeper into the segment (0.78-0.85). An interior-only test (`scripts/interior_check.py`) confirms real synthesis signal: using only windows at least 0.25 s inside a segment against windows from real clips, audio AUC is 0.97 on fake_audio (clip-normalised; 0.995 raw) and 0.66 on the fake_video control, and at a 0.5 s margin it is 0.99 on fake_audio against about 0.55 on fake_video (only 9 positive windows, so treat that as consistent with chance). A within-clip version of the test (`scripts/interior_within.py`) removes the speaker caveat: comparing windows at least 0.25 s inside a fake segment against windows at least 0.5 s outside it in the same clip (same speaker, microphone, room and encoding), audio AUC is 0.98 on fake_audio (156 test clips) and 0.98 on fake_av (196), against 0.65 on the fake_video control (only 24 clips, so indicative). Caveat: this is one dataset with one synthesis system, so it says nothing yet about other generators. Cross-category transfer (0.76-0.95 for audio) is probably inflated by the shared boundary signal. Treat the numbers above as upper bounds, not real-world accuracy. Cross-dataset results are in the next section.
+
+## Cross-dataset results (LAV-DF to FakeAVCeleb)
+
+We trained on LAV-DF only and tested on FakeAVCeleb (21,544 clips; Wav2Lip, FSGAN,
+FaceSwap and RTVC fakes), with no training on FakeAVCeleb. Labels are fake-audio vs
+real-audio.
+
+| setting | audio only | audio + video |
+|---|---|---|
+| raw clips, all 21,544 | 0.975 | 0.878 |
+| re-encoded identically (500/500/500/383 per type) | 0.960 | 0.854 |
+| re-encoded, real video only (RVFA vs RVRA, 500 vs 500) | 0.963 | 0.862 |
+
+The real-video comparison is the cleanest test, because the video is identical and only
+the audio differs. Its 95% interval is roughly +/-0.03.
+
+Findings:
+- Audio appears to transfer, with a caveat: a residual bitrate/size shortcut (metadata
+  AUC 0.686 after re-encoding) cannot be fully ruled out. Video does not help:
+  audio+video is lower than audio alone.
+- FakeAVCeleb has the same kind of metadata shortcut as LAV-DF, and a stronger one.
+  Metadata alone gives AUC 0.993 for fake vs real audio (RTVC clips are mp3/stereo, real
+  clips aac/mono). The raw 0.975 therefore cannot be read as evidence of transfer.
+- After identical re-encoding, duration fields are clean (0.48-0.49). The remainder is
+  bitrate and file size (single-feature AUC 0.57-0.62), most likely the encoder
+  allocating bits by content. The classifier sees only wav2vec2 embeddings, not these
+  fields.
+- Clip-normalised models do not transfer (0.55-0.58). FakeAVCeleb fakes cover the whole
+  clip, so subtracting the clip mean removes the signal.
+
+Scope: one training dataset, one test dataset, Wav2Lip/RTVC-family fakes. No modern
+TTS or diffusion-based fakes. Treat all numbers as upper bounds.
+
+Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav.py`,
+`fakeav_meta_baseline.py`, `fakeav_matched_eval.py`, `fakeav_normalized.py`.
 
 ## Known limitations
 
@@ -86,8 +121,6 @@ One red flag turned out to be informative: the audio-only model scores about 0.8
 
 ## What we want to do next
 
-- Check whether the audio synthesis signal generalises: test on FakeAVCeleb (different generators, no LAV-DF-style splicing) and on a held-out speaker split of LAV-DF.
-- Cross-category tests: train on fake_audio, test on fake_video, and the reverse.
-- Try FakeAVCeleb as a second dataset.
+- Held-out speaker split of LAV-DF (FakeAVCeleb transfer is done, see above).
 - Replace the Haar mouth tracking with landmarks for a real lip-sync score.
 - Test the ESCALATE and invalid-signature paths on more real C2PA manifests.
