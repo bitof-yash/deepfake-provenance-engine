@@ -97,7 +97,7 @@ Findings:
   Metadata alone gives AUC 0.993 for fake vs real audio (RTVC clips are mp3/stereo, real
   clips aac/mono). The raw 0.975 therefore cannot be read as evidence of transfer.
 - After identical re-encoding, duration fields are clean (0.48-0.49). The remainder is
-  bitrate and file size (single-feature AUC 0.57-0.62), most likely the encoder
+  bitrate and file size (single-feature AUC 0.57-0.62, with fake-audio clips having lower bitrate and size), most likely the encoder
   allocating bits by content. The classifier sees only wav2vec2 embeddings, not these
   fields.
 - Clip-normalised models do not transfer (0.55-0.58). FakeAVCeleb fakes cover the whole
