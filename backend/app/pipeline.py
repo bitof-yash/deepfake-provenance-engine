@@ -1,5 +1,5 @@
 """End-to-end analysis pipeline: media -> modality scores -> fusion -> provenance -> routing."""
-from . import (audio_analysis, clipmodel, config, fusion, lipsync, media, provenance, routing,
+from . import (audio_analysis, clipmodel, config, embedmodel, fusion, lipsync, media, provenance, routing,
                video_analysis)
 
 DISCLAIMER_HEURISTIC = (
@@ -10,6 +10,13 @@ DISCLAIMER_MODEL = (
     "Research prototype: the detection score comes from a baseline classifier trained on handcrafted "
     "audio-visual features, and localization is heuristic. Results depend on the training data and must "
     "not be used for real forensic or legal decisions."
+)
+
+
+DISCLAIMER_EMBED = (
+    "Research prototype: the detection score comes from a wav2vec2-embedding classifier trained on "
+    "LAV-DF (one dataset, one synthesis system). It uses audio only; video and lip-sync are not part "
+    "of the score. Results must not be used for real forensic or legal decisions."
 )
 
 
@@ -44,7 +51,7 @@ def compute(path: str) -> dict:
     windows = fusion.build_windows(vres.window_scores, audio_scores, lip_scores, analyzed)
     return {
         "info": info, "analyzed": analyzed, "notes": notes, "vres": vres, "ares": ares,
-        "audio_scores": audio_scores, "lip_scores": lip_scores, "windows": windows,
+        "audio_scores": audio_scores, "lip_scores": lip_scores, "audio": audio, "windows": windows,
         "heuristic_score": fusion.global_score(windows),
         "clip_vector": clipmodel.clip_vector(vres, ares, lip_scores),
     }
@@ -63,6 +70,20 @@ def analyze_file(path: str, filename: str) -> dict:
         disclaimer = DISCLAIMER_MODEL
         notes.append("Detection score from the trained baseline model; localization is heuristic")
 
+    modalities = None
+    if c["audio"] is not None:
+        try:
+            det = embedmodel.detect(c["audio"])
+        except Exception as exc:  # keep the API up; fall back to the heuristics
+            det = None
+            notes.append(f"Learned audio detector failed ({type(exc).__name__}); using fallback")
+        if det is not None:
+            score, disclaimer = det["score"], DISCLAIMER_EMBED
+            windows, segments = det["windows"], det["segments"]
+            modalities = {"video": False, "audio": True, "lipsync": False}
+            notes.append("Detection from the learned wav2vec2 audio model (LAV-DF-trained, 0.25 s windows); "
+                         "video and lip-sync are not used in the score")
+
     prov = provenance.check(path)
     route = routing.route(score, prov)
 
@@ -72,7 +93,7 @@ def analyze_file(path: str, filename: str) -> dict:
         "duration": round(c["info"]["duration"], 2),
         "analyzed_seconds": round(c["analyzed"], 2),
         "detection_score": round(score, 3),
-        "modalities": {
+        "modalities": modalities or {
             "video": True,
             "audio": audio_scores is not None and any(s is not None for s in audio_scores),
             "lipsync": lip_scores is not None and any(s is not None for s in lip_scores),

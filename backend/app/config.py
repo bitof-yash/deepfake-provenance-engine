@@ -25,3 +25,7 @@ SUSPECT_THRESHOLD = 0.40
 FAKE_THRESHOLD = 0.60
 PROVENANCE_VALID_BONUS = 10               # trust-score points
 PROVENANCE_INVALID_PENALTY = 25
+
+# Learned audio detector (wav2vec2 window embeddings -> logistic regression)
+EMBED_WINDOW_SECONDS = 0.25
+EMBED_FLAG_THRESHOLD = 0.55               # window flag threshold (audio model validation range 0.55-0.58)
