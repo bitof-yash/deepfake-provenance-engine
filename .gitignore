@@ -10,3 +10,6 @@ node_modules/
 *.mp4
 *.wav
 !backend/tests/fixtures/**/*.mp4
+
+# ship the small trained audio window model
+!backend/models/audio_window.joblib
