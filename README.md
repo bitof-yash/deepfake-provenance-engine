@@ -120,9 +120,9 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 
 ## Known limitations
 
-- Audio does most of the work. The video-only model is weak once clip-level shortcuts are removed.
+- The shipped detection score is audio-only. The video-only model is weak once clip-level shortcuts are removed, so video and lip-sync do not contribute to the score (a video-only fake with genuine audio will not be flagged).
 - The lip-sync score is weak. It uses a Haar face detector, which sometimes fires on things that are not faces.
-- Fusion is still a simple confidence-weighted softmax, not a learned cross-attention model.
+- Fusion (a confidence-weighted softmax) only runs on the heuristic fallback path. With the learned detector, windows and segments come directly from the audio model.
 - The trust score is a heuristic (100 x (1 - detection), adjusted by provenance). It is not a calibrated probability.
 - C2PA validation needs `c2patool` installed. Without it the engine can only see that C2PA markers exist, and reports `present_unverified`, which is never treated as valid.
 - Only the first 60 s of a file is analysed, and uploads are capped at 200 MB.
@@ -131,6 +131,8 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 ## What we want to do next
 
 - Held-out speaker split of LAV-DF (FakeAVCeleb transfer is done, see above).
+- Evaluate on a third, independent dataset (a different synthesis system) for a clean held-out number.
+- Add a video or cross-modal model so video-only manipulations are scored.
 - Replace the Haar mouth tracking with landmarks for a real lip-sync score.
 - Test the ESCALATE and invalid-signature paths on more real C2PA manifests.
 
