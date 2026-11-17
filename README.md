@@ -124,3 +124,12 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 - Held-out speaker split of LAV-DF (FakeAVCeleb transfer is done, see above).
 - Replace the Haar mouth tracking with landmarks for a real lip-sync score.
 - Test the ESCALATE and invalid-signature paths on more real C2PA manifests.
+
+## Limitations and operating points
+
+- **Audio-only score.** The detection score comes from a wav2vec2-embedding classifier on the audio track. Video and lip-sync are not part of the score, so video-only fakes will not be caught.
+- **Single training source.** Trained on LAV-DF only. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb (cross-dataset), so expect lower performance on other synthesis systems and recording conditions.
+- **Thresholds are dataset-specific operating points, not calibrated probabilities.** SUSPECT = 0.38 and FAKE = 0.55 on the top-20%-window mean score, chosen on FakeAVCeleb speaker-half A. The suspect threshold flags about 6% of real clips on both FakeAVCeleb half B and LAV-DF test, and catches 81% (FakeAVCeleb) and 96% (LAV-DF) of fakes. The fake threshold flags about 2% of real clips on FakeAVCeleb and under 1% on LAV-DF, and catches roughly 55-63% of fakes on FakeAVCeleb and 75-84% on LAV-DF.
+- **Base rates matter.** A ~6% false-alarm rate is acceptable on a balanced evaluation set, but if most real-world uploads are genuine, most "suspect" flags will be false alarms.
+- **Latency.** The first request loads the model (about 5-11 s, longer on a cold download); afterwards about 0.3 s per clip on an M-series Mac.
+- **Not for forensic or legal use.** This is a research prototype.
