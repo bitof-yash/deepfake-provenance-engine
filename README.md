@@ -27,6 +27,15 @@ Tests: `cd backend && python -m pytest -q`. They make their own clips with ffmpe
 
 `POST /analyze` takes a video in the `file` field and returns per-window scores, flagged segments, the provenance result and the routing decision. `GET /health` tells you whether ffmpeg and c2patool were found.
 
+### Configuration
+
+- `DFPE_EMBED=0` disables the learned audio detector and falls back to the heuristics (the tests use this).
+- `DFPE_CORS_ORIGINS` is a comma-separated list of allowed frontend origins (default: the local Vite dev server on port 5173).
+- `VITE_API_URL` tells the frontend where the API is (default `http://localhost:8000`).
+- `HF_TOKEN` is optional. It removes the unauthenticated Hugging Face warning and speeds up the first model download.
+- The first request loads wav2vec2-base (pinned revision) and takes several seconds. Later requests take about 0.3 s per clip.
+- `c2patool` is needed for C2PA verification; `/health` reports whether it and ffmpeg are found.
+
 ## How it works
 
 Video frames and audio are scored in short windows, and the scores are fused into one score per window. Neighbouring suspicious windows get merged into segments. Separately, the file is checked for a C2PA manifest, and a routing policy combines that with the detection result.
