@@ -21,8 +21,10 @@ AGREEMENT_BOOST = 0.10                    # added per extra agreeing modality
 FLAG_THRESHOLD = 0.5                      # window flagged as manipulated
 
 # Trust routing (on the global detection score, 0..1)
-SUSPECT_THRESHOLD = 0.40
-FAKE_THRESHOLD = 0.60
+# Thresholds on the top-20%-window mean score (embedmodel.detect). Chosen at ~5% / ~1% real-clip FPR
+# on FakeAVCeleb speaker-half A; dataset-specific operating points, not calibrated probabilities.
+SUSPECT_THRESHOLD = 0.38
+FAKE_THRESHOLD = 0.55
 PROVENANCE_VALID_BONUS = 10               # trust-score points
 PROVENANCE_INVALID_PENALTY = 25
 

@@ -4,6 +4,7 @@ Loaded lazily, so the API still starts (and falls back to the heuristics) if tor
 or the model file are missing. Mirrors scripts/extract_embeddings.py (same pooling) and
 scripts/train_windows.py (same 3-window smoothing). Set DFPE_EMBED=0 to disable it.
 """
+import math
 import os
 import pathlib
 import threading
@@ -81,4 +82,6 @@ def detect(wav):
                         "end": round(min((k + 1) * config.WINDOW_SECONDS, dur), 2),
                         "video": None, "audio": round(v, 3), "lipsync": None, "fused": round(v, 3),
                         "dominant": "audio" if v >= thr else "none", "flagged": v >= thr})
-    return {"score": float(p.max()), "windows": windows, "segments": segments, "analyzed": dur}
+    q = np.sort(p)[::-1]                                   # clip score: mean of top 20% windows
+    score = float(q[: max(1, math.ceil(0.2 * len(q)))].mean())
+    return {"score": score, "windows": windows, "segments": segments, "analyzed": dur}
