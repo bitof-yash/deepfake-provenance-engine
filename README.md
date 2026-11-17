@@ -129,7 +129,7 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 
 - **Audio-only score.** The detection score comes from a wav2vec2-embedding classifier on the audio track. Video and lip-sync are not part of the score, so video-only fakes will not be caught.
 - **Single training source.** Trained on LAV-DF only. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb (cross-dataset), so expect lower performance on other synthesis systems and recording conditions.
-- **Thresholds are dataset-specific operating points, not calibrated probabilities.** SUSPECT = 0.38 and FAKE = 0.55 on the top-20%-window mean score, chosen on FakeAVCeleb speaker-half A. The suspect threshold flags about 6% of real clips on both FakeAVCeleb half B and LAV-DF test, and catches 81% (FakeAVCeleb) and 96% (LAV-DF) of fakes. The fake threshold flags about 2% of real clips on FakeAVCeleb and under 1% on LAV-DF, and catches roughly 55-63% of fakes on FakeAVCeleb and 75-84% on LAV-DF.
+- **Thresholds are dataset-specific operating points, not calibrated probabilities.** SUSPECT = 0.38 and FAKE = 0.55 on the top-20%-window mean score, chosen on FakeAVCeleb speaker-half A. The suspect threshold flags about 6% of real clips on both FakeAVCeleb half B and LAV-DF test, and catches 81% (FakeAVCeleb) and 96% (LAV-DF) of fakes. The fake threshold flags about 2% of real clips on FakeAVCeleb and under 1% on LAV-DF, and catches about 55% of fakes on FakeAVCeleb half B and 75% on LAV-DF (measured at 0.557, within rounding of 0.55).
 - **Base rates matter.** A ~6% false-alarm rate is acceptable on a balanced evaluation set, but if most real-world uploads are genuine, most "suspect" flags will be false alarms.
 - **Latency.** The first request loads the model (about 5-11 s, longer on a cold download); afterwards about 0.3 s per clip on an M-series Mac.
 - **Not for forensic or legal use.** This is a research prototype.
@@ -137,3 +137,31 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 ## What the shipped detector is
 
 The live `/analyze` score comes from the raw (not clip-normalised) wav2vec2 audio model in `backend/models/audio_window.joblib`, scored as the mean of the top 20% of smoothed 0.25 s windows. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb. The clip-normalised numbers in the results table above are used for localization research and are not what the API serves. The rule (top-20%) was chosen after comparing max, top-20% and mean on both datasets, so the LAV-DF and FakeAVCeleb figures are slightly optimistic.
+
+
+## Model card
+
+**Intended use.** Research prototype for flagging synthetic or spliced speech in short video clips and routing them with C2PA provenance into a trust decision. Not for forensic, legal or moderation decisions.
+
+**Model.** wav2vec2-base (facebook/wav2vec2-base, pinned revision 0b5b8e8) frame embeddings, mean-pooled into 0.25 s windows, then a StandardScaler and logistic regression (file `backend/models/audio_window.joblib`). Trained on the LAV-DF train split only, at most 120,000 windows; FakeAVCeleb was never used for training (recorded in `metadata.json`). Audio only: video and lip-sync are not part of the score.
+
+**Scoring.** Window probabilities are smoothed over 3 windows; the clip score is the mean of the top 20% of windows. The rule was chosen after comparing max, top-20% and mean on both datasets. Windows above 0.55 are flagged and merged into segments (localisation: window AUC 0.965, mean IoU about 0.50 on LAV-DF test).
+
+**Results (clip-level AUC).** LAV-DF test: 0.992 (667 real, 444 fake-audio clips; 0.988 fake_audio, 0.996 fake_av). FakeAVCeleb, cross-dataset: 0.959 (21,544 clips, 500 speakers, 11,335 with fake audio). Both figures are slightly optimistic because the scoring rule was selected using both.
+
+**Operating points (top-20% score).** Thresholds were chosen on FakeAVCeleb speaker-half A and reported on the untouched half B and on LAV-DF test (real flagged / fake flagged):
+
+| Threshold | Role | FakeAVCeleb half B | LAV-DF test |
+|---|---|---|---|
+| 0.38 | SUSPECT | 5.9% / 81.0% | 5.7% / 96.2% |
+| 0.55 | FAKE | about 1.7% / 55% | about 0.7% / 75% |
+
+These are dataset-specific operating points, not calibrated probabilities. Expect to recalibrate on any new data source.
+
+**Known limitations.**
+- Audio only. A fake that alters only the video, with genuine audio, will not be flagged (the UI says so).
+- Part of the audio model's signal is splice/edit-point detection (on LAV-DF fake_video clips, whose audio is genuine, the audio score still peaks at the segment edge). Interior-only and within-clip tests still show real synthesis signal (AUC about 0.98), but see the shortcut section above.
+- A residual bitrate/file-size shortcut remains in both datasets.
+- One synthesis system per dataset, so performance on other generators, languages and recording conditions is unknown.
+- Only the first 60 s of audio is analysed; clips under 0.5 s of audio fall back to the heuristics.
+- With a roughly 6% false-alarm rate at the suspect threshold, most flags will be false alarms if real uploads dominate.
