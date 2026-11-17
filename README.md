@@ -137,11 +137,3 @@ Scripts: `prepare_transfer.py`, `extract_fakeav_embeddings.py`, `evaluate_fakeav
 ## What the shipped detector is
 
 The live `/analyze` score comes from the raw (not clip-normalised) wav2vec2 audio model in `backend/models/audio_window.joblib`, scored as the mean of the top 20% of smoothed 0.25 s windows. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb. The clip-normalised numbers in the results table above are used for localization research and are not what the API serves. The rule (top-20%) was chosen after comparing max, top-20% and mean on both datasets, so the LAV-DF and FakeAVCeleb figures are slightly optimistic.
-
-## What the shipped detector is
-
-The live `/analyze` score comes from the raw (not clip-normalised) wav2vec2 audio model in `backend/models/audio_window.joblib`, scored as the mean of the top 20% of smoothed 0.25 s windows. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb. The clip-normalised numbers in the results table above are used for localization research and are not what the API serves. The rule (top-20%) was chosen after comparing max, top-20% and mean on both datasets, so the LAV-DF and FakeAVCeleb figures are slightly optimistic.
-
-## What the shipped detector is
-
-The live `/analyze` score comes from the raw (not clip-normalised) wav2vec2 audio model in `backend/models/audio_window.joblib`, scored as the mean of the top 20% of smoothed 0.25 s windows. Clip-level AUC is 0.992 on the LAV-DF test split and 0.959 on FakeAVCeleb. The clip-normalised numbers in the results table above are used for localization research and are not what the API serves. The rule (top-20%) was chosen after comparing max, top-20% and mean on both datasets, so the LAV-DF and FakeAVCeleb figures are slightly optimistic.
