@@ -15,6 +15,7 @@ from . import config
 
 MODEL_PATH = pathlib.Path(__file__).resolve().parent.parent / "models" / "audio_window.joblib"
 W2V_NAME = "facebook/wav2vec2-base"
+W2V_REVISION = "0b5b8e868dd84f03fd87d01f9c4ff0f080fecfe8"   # pinned so fresh clones get identical weights
 _lock = threading.Lock()
 _state = {}
 
@@ -32,7 +33,7 @@ def _load():
             device = ("cuda" if torch.cuda.is_available()
                       else "mps" if torch.backends.mps.is_available() else "cpu")
             _state["torch"], _state["device"] = torch, device
-            _state["w2v"] = Wav2Vec2Model.from_pretrained(W2V_NAME).to(device).eval()
+            _state["w2v"] = Wav2Vec2Model.from_pretrained(W2V_NAME, revision=W2V_REVISION).to(device).eval()
             _state["clf"] = joblib.load(MODEL_PATH)
     return _state
 
