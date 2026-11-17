@@ -71,7 +71,7 @@ function Timeline({ result }) {
       <div className="timeline">
         {tracks.map(([label, key]) => (
           <div className="track" key={key}>
-            <span className="track-label">{label}</span>
+            <span className="track-label">{label}{key !== "fused" && result.modalities && result.modalities[key] === false ? " (not scored)" : ""}</span>
             <div className="cells" style={{ gridTemplateColumns: `repeat(${windows.length}, 1fr)` }}>
               {windows.map((w) => (
                 <div
@@ -146,6 +146,13 @@ function Results({ result, onReset }) {
         <div className="callout">
           Provenance and detection disagree. The trust-routing policy escalated this file instead of trusting either
           signal alone.
+        </div>
+      )}
+
+      {result.modalities && !result.modalities.video && (
+        <div className="callout">
+          The detection score uses audio only. Video and lip-sync were not scored, so a video-only
+          manipulation would not be flagged.
         </div>
       )}
 
