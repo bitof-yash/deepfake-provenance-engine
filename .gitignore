@@ -13,3 +13,4 @@ node_modules/
 
 # ship the small trained audio window model
 !backend/models/audio_window.joblib
+frontend/dist/
